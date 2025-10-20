@@ -22,6 +22,10 @@ eggs/
 *.swp
 *.swo
 
+# Images
+*.png
+*.jpg
+
 # Documentation files (optional, commented out by default)
 *.md
 *.html

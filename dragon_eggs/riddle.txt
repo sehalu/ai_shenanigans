@@ -1,0 +1,8 @@
+This is a story from Scam School (Bryan Brushwood)
+
+The gnome wizard demands to know what his magical dragon eggs's ultimate bearing capacity is in the unit of building stories. It's a logistical thing.
+
+The wizard has 2 identical magical dragon eggs.
+The wizard lives in a 100 story tower.
+Your task is to reliably find the breaking point.
+(You have 14 drops total, optimally)

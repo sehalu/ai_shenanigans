@@ -16,6 +16,7 @@ class ArrayParameters:
     """Parameters defining a linear antenna array."""
     n_elements: int
     spacing_wavelength: float
+    steering_angle: float = 0.0  # Main beam steering angle in degrees
     amplitude_weights: Optional[np.ndarray] = None
     phase_weights: Optional[np.ndarray] = None
     phase_error_std: float = 0.0  # Standard deviation of phase errors in degrees
@@ -88,6 +89,7 @@ def calculate_pattern(params: ArrayParameters, theta: np.ndarray, snr_db: Option
     """
     # Convert to radians
     theta_rad = np.deg2rad(theta)
+    steering_rad = np.deg2rad(params.steering_angle)
     
     # Calculate phase progression
     k = 2 * np.pi  # Wavenumber (normalized to wavelength)
@@ -96,8 +98,8 @@ def calculate_pattern(params: ArrayParameters, theta: np.ndarray, snr_db: Option
     # Element positions
     positions = np.arange(params.n_elements) * d
     
-    # Calculate steering vector for each angle
-    steering_vectors = np.exp(1j * k * positions[:, np.newaxis] * np.sin(theta_rad))
+    # Calculate steering vector for each angle relative to steering angle
+    steering_vectors = np.exp(1j * k * positions[:, np.newaxis] * (np.sin(theta_rad) - np.sin(steering_rad)))
     
     # Apply weights and phase errors
     total_phases = np.deg2rad(params.get_total_phases())  # Convert to radians

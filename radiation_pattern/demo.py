@@ -16,11 +16,11 @@ matplotlib.use('TkAgg')  # Use TkAgg backend for interactive plots
 import matplotlib.pyplot as plt
 from linear_array import ArrayParameters, calculate_pattern
 
-def plot_cartesian(n_elements_list, theta, patterns, patterns_db, snr_db=None, phase_error_std=None):
+def plot_cartesian(n_elements_list, theta, patterns, patterns_db, steering_angle=0, snr_db=None, phase_error_std=None):
     """Create comparison plot in Cartesian coordinates."""
     fig = plt.figure(figsize=(20, 8))
     title = 'Radiation Pattern Comparison for Different Array Sizes\n' \
-            f'Element Spacing: 0.5λ'
+            f'Element Spacing: 0.5λ, Steering Angle: {steering_angle}°'
     if snr_db is not None:
         title += f'\nSNR: {snr_db} dB'
     if phase_error_std is not None:
@@ -52,11 +52,11 @@ def plot_cartesian(n_elements_list, theta, patterns, patterns_db, snr_db=None, p
     
     plt.tight_layout()
 
-def plot_polar(n_elements_list, theta, patterns, patterns_db, snr_db=None, phase_error_std=None):
+def plot_polar(n_elements_list, theta, patterns, patterns_db, steering_angle=0, snr_db=None, phase_error_std=None):
     """Create comparison plot in polar coordinates."""
     fig = plt.figure(figsize=(20, 10))
     title = 'Radiation Pattern Comparison for Different Array Sizes\n' \
-            f'Element Spacing: 0.5λ'
+            f'Element Spacing: 0.5λ, Steering Angle: {steering_angle}°'
     if snr_db is not None:
         title += f'\nSNR: {snr_db} dB'
     if phase_error_std is not None:
@@ -93,6 +93,8 @@ def main():
                           help='Signal-to-Noise Ratio in dB for adding AWGN (default: no noise)')
         parser.add_argument('--phase-error', type=float, default=None,
                           help='Standard deviation of phase errors in degrees (default: no phase errors)')
+        parser.add_argument('--steering', type=float, default=None,
+                          help='Main beam steering angle in degrees (default: 0°)')
         args = parser.parse_args()
         
         print(f"Selected coordinate system: {args.coords}")
@@ -109,6 +111,7 @@ def main():
             params = ArrayParameters(
                 n_elements=n,
                 spacing_wavelength=0.5,
+                steering_angle=args.steering if args.steering is not None else 0.0,
                 phase_error_std=args.phase_error if args.phase_error is not None else 0.0
             )
             pattern = calculate_pattern(params, theta, snr_db=args.snr)

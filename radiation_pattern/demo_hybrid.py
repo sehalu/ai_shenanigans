@@ -16,11 +16,11 @@ matplotlib.use('TkAgg')  # Use TkAgg backend for interactive plots
 import matplotlib.pyplot as plt
 from linear_array_hybrid import ArrayParameters, calculate_pattern
 
-def plot_cartesian(n_elements_list, theta, patterns, patterns_db, snr_db=None, phase_error_std=None):
+def plot_cartesian(n_elements_list, theta, patterns, patterns_db, steering_angle=0, snr_db=None, phase_error_std=None):
     """Create comparison plot in Cartesian coordinates."""
     fig = plt.figure(figsize=(20, 8))
     title = 'Radiation Pattern Comparison for Different Array Sizes (Hybrid C/Python)\n' \
-            f'Element Spacing: 0.5λ'
+            f'Element Spacing: 0.5λ, Steering Angle: {steering_angle}°'
     if snr_db is not None:
         title += f'\nSNR: {snr_db} dB'
     if phase_error_std is not None:
@@ -32,13 +32,15 @@ def plot_cartesian(n_elements_list, theta, patterns, patterns_db, snr_db=None, p
     for idx, (n, pattern, pattern_db) in enumerate(zip(n_elements_list, patterns, patterns_db)):
         # Linear scale plot
         ax1 = fig.add_subplot(gs[0, idx])
-        ax1.plot(theta, np.abs(pattern))
+        pattern_abs = np.abs(pattern)
+        max_val = np.max(pattern_abs)
+        ax1.plot(theta, pattern_abs / max_val)  # Normalize to max value
         ax1.set_title(f'N = {n}')
         ax1.grid(True)
         if idx == 0:
-            ax1.set_ylabel('Magnitude (Linear)')
+            ax1.set_ylabel('Normalized Magnitude')
         ax1.set_xlim(-180, 180)
-        ax1.set_ylim(0, max(n_elements_list))
+        ax1.set_ylim(0, 1.1)  # Normalized scale with small margin
         
         # dB scale plot
         ax2 = fig.add_subplot(gs[1, idx])
@@ -48,15 +50,15 @@ def plot_cartesian(n_elements_list, theta, patterns, patterns_db, snr_db=None, p
             ax2.set_ylabel('Magnitude (dB)')
         ax2.set_xlabel('Angle (degrees)')
         ax2.set_xlim(-180, 180)
-        ax2.set_ylim(-40, 0)
+        ax2.set_ylim(-60, 0)  # Extend range to -60 dB
     
     plt.tight_layout()
 
-def plot_polar(n_elements_list, theta, patterns, patterns_db, snr_db=None, phase_error_std=None):
+def plot_polar(n_elements_list, theta, patterns, patterns_db, steering_angle=0, snr_db=None, phase_error_std=None):
     """Create comparison plot in polar coordinates."""
     fig = plt.figure(figsize=(20, 10))
     title = 'Radiation Pattern Comparison for Different Array Sizes (Hybrid C/Python)\n' \
-            f'Element Spacing: 0.5λ'
+            f'Element Spacing: 0.5λ, Steering Angle: {steering_angle}°'
     if snr_db is not None:
         title += f'\nSNR: {snr_db} dB'
     if phase_error_std is not None:
@@ -69,15 +71,17 @@ def plot_polar(n_elements_list, theta, patterns, patterns_db, snr_db=None, phase
     for idx, (n, pattern, pattern_db) in enumerate(zip(n_elements_list, patterns, patterns_db)):
         # Linear scale plot
         ax1 = plt.subplot(2, len(n_elements_list), idx + 1, projection='polar')
-        ax1.plot(theta_rad, np.abs(pattern))
+        pattern_abs = np.abs(pattern)
+        ax1.plot(theta_rad, pattern_abs / np.max(pattern_abs))  # Normalize
         ax1.set_title(f'N = {n}\nLinear Scale')
         ax1.grid(True)
         
         # dB scale plot
         ax2 = plt.subplot(2, len(n_elements_list), idx + 1 + len(n_elements_list), projection='polar')
-        # Normalize dB pattern to positive values for polar plot
-        pattern_db_norm = pattern_db - np.min(pattern_db)
-        ax2.plot(theta_rad, pattern_db_norm)
+        # Scale dB pattern for polar plot (map -60 to 0 dB to 0 to 1)
+        pattern_db_scaled = (pattern_db + 60) / 60  # Scale -60:0 dB to 0:1
+        pattern_db_scaled = np.clip(pattern_db_scaled, 0, 1)  # Clip to valid range
+        ax2.plot(theta_rad, pattern_db_scaled)
         ax2.set_title(f'N = {n}\ndB Scale')
         ax2.grid(True)
     
@@ -125,6 +129,8 @@ def main():
                           help='Signal-to-Noise Ratio in dB for adding AWGN (default: no noise)')
         parser.add_argument('--phase-error', type=float, default=None,
                           help='Standard deviation of phase errors in degrees (default: no phase errors)')
+        parser.add_argument('--steering', type=float, default=None,
+                          help='Main beam steering angle in degrees (default: 0°)')
         parser.add_argument('--compare', action='store_true',
                           help='Run performance comparison with pure Python implementation')
         args = parser.parse_args()
@@ -133,7 +139,7 @@ def main():
         print("Starting calculations...")
         
         # Array sizes to compare
-        n_elements_list = [1, 2, 4, 8, 64]
+        n_elements_list = [8, 16, 32, 64, 128]  # Use larger arrays to better show steering
         theta = np.linspace(-180, 180, 721)  # 0.5 degree resolution
         
         # Calculate patterns for all array sizes
@@ -143,10 +149,14 @@ def main():
             params = ArrayParameters(
                 n_elements=n,
                 spacing_wavelength=0.5,
+                steering_angle=args.steering if args.steering is not None else 0.0,
                 phase_error_std=args.phase_error if args.phase_error is not None else 0.0
             )
-            pattern = calculate_pattern(params, theta, snr_db=args.snr)
-            pattern_db = 20 * np.log10(np.abs(pattern) / np.max(np.abs(pattern)))
+            pattern = calculate_pattern(params, theta)
+            pattern_abs = np.abs(pattern)
+            max_val = np.max(pattern_abs)
+            # Add small offset to prevent log of zero, and limit dynamic range to -60 dB
+            pattern_db = 20 * np.log10(np.maximum(pattern_abs, max_val * 1e-6) / max_val)
             patterns.append(pattern)
             patterns_db.append(pattern_db)
         

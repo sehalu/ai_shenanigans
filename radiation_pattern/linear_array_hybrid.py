@@ -42,6 +42,7 @@ def load_radiation_pattern_lib() -> ctypes.CDLL:
     lib.calculate_pattern.argtypes = [
         ctypes.c_int,          # n_elements
         ctypes.c_double,       # spacing_wavelength
+        ctypes.c_double,       # steering_angle
         array_1d_double,       # amplitude_weights
         array_1d_double,       # phase_weights
         array_1d_double,       # phase_errors
@@ -68,6 +69,7 @@ class ArrayParameters:
     """Parameters defining a linear antenna array."""
     n_elements: int
     spacing_wavelength: float
+    steering_angle: float = 0.0  # Main beam steering angle in degrees
     amplitude_weights: Optional[np.ndarray] = None
     phase_weights: Optional[np.ndarray] = None
     phase_error_std: float = 0.0  # Standard deviation of phase errors in degrees
@@ -130,6 +132,7 @@ def calculate_pattern(params: ArrayParameters, theta: np.ndarray, snr_db: Option
     result = _lib.calculate_pattern(
         params.n_elements,
         params.spacing_wavelength,
+        params.steering_angle,
         params.amplitude_weights,
         params.phase_weights,
         params._phase_errors,
@@ -166,8 +169,11 @@ def plot_radiation_pattern(params: ArrayParameters, theta: Optional[np.ndarray] 
     # Calculate pattern
     pattern = calculate_pattern(params, theta)
     
-    # Convert to dB, normalized
-    pattern_db = 20 * np.log10(np.abs(pattern) / np.max(np.abs(pattern)))
+    # Convert to dB, normalized, with handling for very small values
+    pattern_abs = np.abs(pattern)
+    max_val = np.max(pattern_abs)
+    # Add small offset to prevent log of zero, and limit dynamic range to -60 dB
+    pattern_db = 20 * np.log10(np.maximum(pattern_abs, max_val * 1e-6) / max_val)
     
     # Create subplot
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))

@@ -27,6 +27,7 @@
 EXPORT int calculate_pattern(
     int n_elements,
     double spacing_wavelength,
+    double steering_angle,  // Steering angle in degrees
     const double* amplitude_weights,
     const double* phase_weights,
     const double* phase_errors,
@@ -46,6 +47,10 @@ EXPORT int calculate_pattern(
         total_phases[i] = (phase_weights[i] + phase_errors[i]) * M_PI / 180.0;
     }
 
+    // Convert steering angle to radians
+    const double steering_rad = steering_angle * M_PI / 180.0;
+    const double sin_steering = sin(steering_rad);
+
     // Calculate pattern for each angle
     #pragma omp parallel for if(n_theta > 1000)
     for (int t = 0; t < n_theta; t++) {
@@ -56,7 +61,7 @@ EXPORT int calculate_pattern(
         // Calculate contribution from each element
         for (int n = 0; n < n_elements; n++) {
             const double position = n * d;
-            const double phase = k * position * sin_theta + total_phases[n];
+            const double phase = k * position * (sin_theta - sin_steering) + total_phases[n];
             sum += amplitude_weights[n] * (cos(phase) + I * sin(phase));
         }
 

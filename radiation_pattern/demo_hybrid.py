@@ -152,7 +152,7 @@ def main():
                 steering_angle=args.steering if args.steering is not None else 0.0,
                 phase_error_std=args.phase_error if args.phase_error is not None else 0.0
             )
-            pattern = calculate_pattern(params, theta)
+            pattern = calculate_pattern(params, theta, snr_db=args.snr)  # Pass SNR parameter here
             pattern_abs = np.abs(pattern)
             max_val = np.max(pattern_abs)
             # Add small offset to prevent log of zero, and limit dynamic range to -60 dB
@@ -162,9 +162,13 @@ def main():
         
         # Plot in the specified coordinate system
         if args.coords == 'polar':
-            plot_polar(n_elements_list, theta, patterns, patterns_db, args.snr, args.phase_error)
+            plot_polar(n_elements_list, theta, patterns, patterns_db, 
+                      steering_angle=args.steering if args.steering is not None else 0.0,
+                      snr_db=args.snr, phase_error_std=args.phase_error)
         else:
-            plot_cartesian(n_elements_list, theta, patterns, patterns_db, args.snr, args.phase_error)
+            plot_cartesian(n_elements_list, theta, patterns, patterns_db,
+                         steering_angle=args.steering if args.steering is not None else 0.0,
+                         snr_db=args.snr, phase_error_std=args.phase_error)
         
         if args.compare:
             compare_with_python()

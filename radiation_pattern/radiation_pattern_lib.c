@@ -4,12 +4,63 @@
 #include <stdlib.h>
 #include <complex.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef _WIN32
 #define EXPORT __declspec(dllexport)
 #else
 #define EXPORT
 #endif
+
+// PCG Random Number Generator state
+typedef struct {
+    uint64_t state;
+    uint64_t inc;
+} pcg32_random_t;
+
+// Initialize PCG RNG
+static pcg32_random_t rng = { 0x853c49e6748fea9bULL, 0xda3e39cb94b95bdbULL };
+
+// PCG Random Number Generator implementation
+static uint32_t pcg32_random(void) {
+    uint64_t oldstate = rng.state;
+    rng.state = oldstate * 6364136223846793005ULL + rng.inc;
+    uint32_t xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
+    uint32_t rot = oldstate >> 59u;
+    return (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
+}
+
+// Seed the PCG RNG
+EXPORT void seed_rng(uint64_t seed) {
+    rng.state = seed;
+    rng.inc = (seed << 1) | 1;
+    pcg32_random(); // Advance state
+}
+
+// Generate random normal using Box-Muller transform
+static double randn(double mean, double std_dev) {
+    double u1, u2, z;
+    static bool has_spare = false;
+    static double spare;
+
+    if (has_spare) {
+        has_spare = false;
+        return mean + std_dev * spare;
+    }
+
+    do {
+        u1 = (double)pcg32_random() / UINT32_MAX;
+        u2 = (double)pcg32_random() / UINT32_MAX;
+    } while (u1 <= 1e-7);  // Avoid log(0)
+
+    double r = sqrt(-2.0 * log(u1));
+    double theta = 2.0 * M_PI * u2;
+    z = r * cos(theta);
+    spare = r * sin(theta);
+    has_spare = true;
+
+    return mean + std_dev * z;
+}
 
 /**
  * Calculate radiation pattern for a linear array
@@ -18,7 +69,7 @@
  * @param spacing_wavelength Spacing between elements in wavelengths
  * @param amplitude_weights Array of amplitude weights (length n_elements)
  * @param phase_weights Array of phase weights in degrees (length n_elements)
- * @param phase_errors Array of phase errors in degrees (length n_elements)
+ * @param phase_error_std Standard deviation of phase errors in degrees
  * @param theta_deg Array of angles in degrees
  * @param n_theta Length of theta array
  * @param pattern_out Output array for pattern (length n_theta)
@@ -30,7 +81,7 @@ EXPORT int calculate_pattern(
     double steering_angle,  // Steering angle in degrees
     const double* amplitude_weights,
     const double* phase_weights,
-    const double* phase_errors,
+    double phase_error_std,  // Standard deviation of phase errors in degrees
     const double* theta_deg,
     int n_theta,
     double complex* pattern_out
@@ -39,12 +90,13 @@ EXPORT int calculate_pattern(
     const double k = 2.0 * M_PI;  // Wavenumber (normalized to wavelength)
     const double d = spacing_wavelength;
 
-    // Pre-calculate total phases in radians
+    // Pre-calculate total phases in radians, including fresh random errors
     double* total_phases = (double*)malloc(n_elements * sizeof(double));
     if (!total_phases) return -1;
 
     for (int i = 0; i < n_elements; i++) {
-        total_phases[i] = (phase_weights[i] + phase_errors[i]) * M_PI / 180.0;
+        double phase_error = phase_error_std > 0 ? randn(0, phase_error_std) : 0;
+        total_phases[i] = (phase_weights[i] + phase_error) * M_PI / 180.0;
     }
 
     // Convert steering angle to radians
@@ -100,17 +152,7 @@ EXPORT int add_awgn(
     // Add complex noise to signal
     #pragma omp parallel for if(n_samples > 1000)
     for (int i = 0; i < n_samples; i++) {
-        // Box-Muller transform for Gaussian random numbers
-        double u1, u2, z1, z2;
-        do {
-            u1 = (double)rand() / RAND_MAX;
-            u2 = (double)rand() / RAND_MAX;
-        } while (u1 <= 1e-7);  // Avoid log(0)
-
-        z1 = sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
-        z2 = sqrt(-2.0 * log(u1)) * sin(2.0 * M_PI * u2);
-
-        signal[i] += noise_std * (z1 + I * z2);
+        signal[i] += noise_std * (randn(0, 1) + I * randn(0, 1));
     }
 
     return 0;

@@ -20,10 +20,15 @@ class ArrayParameters:
     amplitude_weights: Optional[np.ndarray] = None
     phase_weights: Optional[np.ndarray] = None
     phase_error_std: float = 0.0  # Standard deviation of phase errors in degrees
+    seed: Optional[int] = None  # Random seed for reproducible phase errors
     _phase_errors: Optional[np.ndarray] = None
+    _rng: Optional[np.random.Generator] = None
 
     def __post_init__(self):
         """Validate and initialize weights if not provided."""
+        # Initialize random number generator
+        self._rng = np.random.default_rng(self.seed)
+        
         if self.amplitude_weights is None:
             self.amplitude_weights = np.ones(self.n_elements)
         if self.phase_weights is None:
@@ -34,22 +39,27 @@ class ArrayParameters:
         if len(self.phase_weights) != self.n_elements:
             raise ValueError("Phase weights must match number of elements")
         
-        # Generate random phase errors
-        if self.phase_error_std > 0:
-            self._phase_errors = np.random.normal(0, self.phase_error_std, self.n_elements)
-        else:
-            self._phase_errors = np.zeros(self.n_elements)
+        # Initialize phase errors (will be regenerated in get_total_phases)
+        self._phase_errors = np.zeros(self.n_elements)
+        
+        # Ensure arrays are contiguous and double precision for C interface
+        self.amplitude_weights = np.ascontiguousarray(self.amplitude_weights, dtype=np.float64)
+        self.phase_weights = np.ascontiguousarray(self.phase_weights, dtype=np.float64)
+        self._phase_errors = np.ascontiguousarray(self._phase_errors, dtype=np.float64)
     
     def get_total_phases(self) -> np.ndarray:
         """Get the total phase for each element including errors."""
+        if self.phase_error_std > 0:
+            self._phase_errors = self._rng.normal(0, self.phase_error_std, self.n_elements)
         return self.phase_weights + self._phase_errors
     
     def regenerate_phase_errors(self):
-        """Generate new random phase errors. Useful for Monte Carlo simulations."""
+        """Regenerate random phase errors. Useful for Monte Carlo simulations."""
         if self.phase_error_std > 0:
-            self._phase_errors = np.random.normal(0, self.phase_error_std, self.n_elements)
+            self._phase_errors = self._rng.normal(0, self.phase_error_std, self.n_elements)
         else:
             self._phase_errors = np.zeros(self.n_elements)
+        self._phase_errors = np.ascontiguousarray(self._phase_errors, dtype=np.float64)
 
 def add_awgn(signal: np.ndarray, snr_db: float) -> np.ndarray:
     """

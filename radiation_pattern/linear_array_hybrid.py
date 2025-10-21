@@ -39,13 +39,17 @@ def load_radiation_pattern_lib() -> ctypes.CDLL:
     array_1d_double = npct.ndpointer(dtype=np.float64, ndim=1, flags='CONTIGUOUS')
     array_1d_complex = npct.ndpointer(dtype=np.complex128, ndim=1, flags='CONTIGUOUS')
     
+    # RNG seed function
+    lib.seed_rng.argtypes = [ctypes.c_uint64]
+    lib.seed_rng.restype = None
+
     lib.calculate_pattern.argtypes = [
         ctypes.c_int,          # n_elements
         ctypes.c_double,       # spacing_wavelength
         ctypes.c_double,       # steering_angle
         array_1d_double,       # amplitude_weights
         array_1d_double,       # phase_weights
-        array_1d_double,       # phase_errors
+        ctypes.c_double,       # phase_error_std
         array_1d_double,       # theta_deg
         ctypes.c_int,          # n_theta
         array_1d_complex       # pattern_out
@@ -73,10 +77,14 @@ class ArrayParameters:
     amplitude_weights: Optional[np.ndarray] = None
     phase_weights: Optional[np.ndarray] = None
     phase_error_std: float = 0.0  # Standard deviation of phase errors in degrees
-    _phase_errors: Optional[np.ndarray] = None
+    seed: Optional[int] = None  # Random seed for reproducible phase errors
 
     def __post_init__(self):
         """Validate and initialize weights if not provided."""
+        # Set random seed if provided
+        if self.seed is not None:
+            _lib.seed_rng(self.seed)
+        
         if self.amplitude_weights is None:
             self.amplitude_weights = np.ones(self.n_elements)
         if self.phase_weights is None:
@@ -87,28 +95,9 @@ class ArrayParameters:
         if len(self.phase_weights) != self.n_elements:
             raise ValueError("Phase weights must match number of elements")
         
-        # Generate random phase errors
-        if self.phase_error_std > 0:
-            self._phase_errors = np.random.normal(0, self.phase_error_std, self.n_elements)
-        else:
-            self._phase_errors = np.zeros(self.n_elements)
-        
         # Ensure arrays are contiguous and double precision
         self.amplitude_weights = np.ascontiguousarray(self.amplitude_weights, dtype=np.float64)
         self.phase_weights = np.ascontiguousarray(self.phase_weights, dtype=np.float64)
-        self._phase_errors = np.ascontiguousarray(self._phase_errors, dtype=np.float64)
-    
-    def get_total_phases(self) -> np.ndarray:
-        """Get the total phase for each element including errors."""
-        return self.phase_weights + self._phase_errors
-    
-    def regenerate_phase_errors(self):
-        """Generate new random phase errors. Useful for Monte Carlo simulations."""
-        if self.phase_error_std > 0:
-            self._phase_errors = np.random.normal(0, self.phase_error_std, self.n_elements)
-        else:
-            self._phase_errors = np.zeros(self.n_elements)
-        self._phase_errors = np.ascontiguousarray(self._phase_errors, dtype=np.float64)
 
 def calculate_pattern(params: ArrayParameters, theta: np.ndarray, snr_db: Optional[float] = None) -> np.ndarray:
     """
@@ -135,7 +124,7 @@ def calculate_pattern(params: ArrayParameters, theta: np.ndarray, snr_db: Option
         params.steering_angle,
         params.amplitude_weights,
         params.phase_weights,
-        params._phase_errors,
+        params.phase_error_std,  # Pass std dev directly
         theta,
         len(theta),
         pattern

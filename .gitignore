@@ -30,6 +30,11 @@ eggs/
 *.md
 *.html
 
+# Object, compiled, binary and linked files
+*.o
+*.exe
+*.dll
+
 # Keep specific documentation files
 !README.md
 !CONTRIBUTING.md
